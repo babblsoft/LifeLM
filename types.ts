@@ -13,6 +13,7 @@ export interface Mission {
   title: string;
   category: 'EVERYDAY' | 'FINITE';
   status: 'PENDING' | 'COMPLETED';
+  activationDate?: string; // When the mission should become active
   deadline?: string;
   description?: string;
 }
@@ -59,6 +60,7 @@ export interface AppState {
     birthday: string;
     phoneNumber?: string;
     aiVoice?: string;
+    googleClientId?: string;
   };
   diaryEntries: DiaryEntry[];
   missions: Mission[];

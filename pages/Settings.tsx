@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, Smartphone, Mic, Trash2, Save } from 'lucide-react';
+import { User, Smartphone, Mic, Trash2, Save, LogOut, Cloud } from 'lucide-react';
 
 export const SettingsPage = () => {
-  const { userProfile, updateUserProfile, resetAppData } = useApp();
+  const { userProfile, updateUserProfile, resetAppData, logout } = useApp();
   
   const [name, setName] = useState(userProfile.name);
   const [career, setCareer] = useState(userProfile.career);
   const [phone, setPhone] = useState(userProfile.phoneNumber || '');
   const [voice, setVoice] = useState(userProfile.aiVoice || 'Kore');
+  const [clientId, setClientId] = useState(userProfile.googleClientId || '');
   const [isSaved, setIsSaved] = useState(false);
 
   const handleSave = () => {
@@ -16,7 +17,8 @@ export const SettingsPage = () => {
           name,
           career,
           phoneNumber: phone,
-          aiVoice: voice
+          aiVoice: voice,
+          googleClientId: clientId
       });
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
@@ -28,7 +30,6 @@ export const SettingsPage = () => {
       <p className="text-gray-400 text-xs uppercase tracking-widest mb-8">Personalize BasePulse</p>
 
       <div className="space-y-6">
-        {/* Profile Section */}
         <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-sm font-bold text-charcoal mb-4 flex items-center">
                 <User size={16} className="mr-2 text-terra" />
@@ -56,7 +57,6 @@ export const SettingsPage = () => {
             </div>
         </section>
 
-        {/* Communication Section */}
         <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-sm font-bold text-charcoal mb-4 flex items-center">
                 <Smartphone size={16} className="mr-2 text-terra" />
@@ -64,7 +64,7 @@ export const SettingsPage = () => {
             </h2>
             <div className="space-y-4">
                 <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">SMS Number (For Reminders)</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">SMS Number</label>
                     <input 
                         type="tel" 
                         value={phone} 
@@ -91,7 +91,26 @@ export const SettingsPage = () => {
             </div>
         </section>
 
-        {/* Save Button */}
+        <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h2 className="text-sm font-bold text-charcoal mb-4 flex items-center">
+                <Cloud size={16} className="mr-2 text-terra" />
+                Integrations
+            </h2>
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Google Cloud Client ID</label>
+                    <input 
+                        type="text" 
+                        value={clientId} 
+                        onChange={(e) => setClientId(e.target.value)}
+                        placeholder="apps.googleusercontent.com"
+                        className="w-full bg-softGray rounded-lg p-3 text-xs text-charcoal focus:outline-none font-mono"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-2">Required for Calendar Sync. Create one in Google Cloud Console.</p>
+                </div>
+            </div>
+        </section>
+
         <button 
             onClick={handleSave}
             className={`w-full py-4 rounded-xl font-bold shadow-lg flex items-center justify-center space-x-2 transition-all ${
@@ -102,8 +121,14 @@ export const SettingsPage = () => {
             <span>{isSaved ? 'Changes Saved' : 'Save Configuration'}</span>
         </button>
 
-        {/* Danger Zone */}
-        <section className="pt-8 border-t border-gray-200">
+        <section className="pt-8 border-t border-gray-200 flex flex-col space-y-3">
+            <button 
+                onClick={logout}
+                className="w-full py-3 rounded-xl bg-gray-100 text-charcoal text-sm font-bold hover:bg-gray-200 transition-colors flex items-center justify-center"
+            >
+                <LogOut size={16} className="mr-2" />
+                Disconnect Identity (Logout)
+            </button>
             <button 
                 onClick={resetAppData}
                 className="w-full py-3 rounded-xl border border-red-200 text-red-500 text-sm font-bold hover:bg-red-50 transition-colors flex items-center justify-center"

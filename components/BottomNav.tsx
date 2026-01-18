@@ -15,8 +15,8 @@ export const BottomNav = () => {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-100 pb-safe pt-2 px-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
-      <div className="flex justify-between items-center max-w-md mx-auto">
+    <div className="w-full bg-white border-t border-gray-100 pb-safe pt-2 px-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-[100] relative pointer-events-auto">
+      <div className="flex justify-between items-center max-w-md mx-auto h-16">
         {navItems.map((item) => {
             const isActive = currentPage === item.page;
             // BasePulse Special Styling
@@ -24,8 +24,8 @@ export const BottomNav = () => {
                 return (
                     <button
                         key={item.page}
-                        onClick={() => setPage(item.page)}
-                        className={`flex flex-col items-center justify-center -mt-6 p-3 rounded-full shadow-lg transition-transform ${
+                        onClick={(e) => { e.preventDefault(); setPage(item.page); }}
+                        className={`flex flex-col items-center justify-center -mt-8 p-3 rounded-full shadow-lg transition-transform pointer-events-auto z-[110] ${
                             isActive ? 'bg-terra text-white scale-110' : 'bg-charcoal text-white hover:scale-105'
                         }`}
                     >
@@ -37,8 +37,8 @@ export const BottomNav = () => {
             return (
                 <button
                     key={item.page}
-                    onClick={() => setPage(item.page)}
-                    className={`flex flex-col items-center justify-center p-2 rounded-xl w-16 transition-all ${
+                    onClick={(e) => { e.preventDefault(); setPage(item.page); }}
+                    className={`flex flex-col items-center justify-center p-2 rounded-xl w-16 transition-all pointer-events-auto ${
                     isActive ? 'text-terra' : 'text-gray-400 hover:text-gray-600'
                     }`}
                 >

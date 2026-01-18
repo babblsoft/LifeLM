@@ -1,12 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { format, subDays, isSameDay } from 'date-fns';
-import { Calendar, PenTool, BookOpen, CalendarDays } from 'lucide-react';
+import { Calendar, PenTool, BookOpen, CalendarDays, BrainCircuit } from 'lucide-react';
+import { analyzeDay } from '../services/gemini';
 
 export const StreamsPage = () => {
   const { diaryEntries, setPage } = useApp();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'FACT' | 'LIFE'>('FACT');
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
   const dateInputRef = useRef<HTMLInputElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -14,8 +18,11 @@ export const StreamsPage = () => {
     entry => isSameDay(new Date(entry.date), selectedDate) && entry.type === activeTab
   );
 
+  const allEntriesForDate = diaryEntries.filter(
+      entry => isSameDay(new Date(entry.date), selectedDate)
+  );
+
   // Generate Date Strip - Chronological Order: [Today-29, ... , Today]
-  // This places past days on the left and Today on the right.
   const dateStrip = Array.from({ length: 30 }).map((_, i) => {
     return subDays(new Date(), 29 - i);
   });
@@ -23,6 +30,7 @@ export const StreamsPage = () => {
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.value) {
           setSelectedDate(new Date(e.target.value));
+          setAnalysis(null); // Reset analysis on date change
       }
   };
 
@@ -34,6 +42,14 @@ export const StreamsPage = () => {
         scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
     }
   }, []);
+
+  const handleAnalyze = async () => {
+      if (allEntriesForDate.length === 0) return;
+      setIsAnalyzing(true);
+      const result = await analyzeDay(allEntriesForDate, format(selectedDate, 'yyyy-MM-dd'));
+      setAnalysis(result);
+      setIsAnalyzing(false);
+  };
 
   return (
     <div className="h-full bg-cream flex flex-col pt-12">
@@ -87,7 +103,7 @@ export const StreamsPage = () => {
                 return (
                     <button
                         key={idx}
-                        onClick={() => setSelectedDate(date)}
+                        onClick={() => { setSelectedDate(date); setAnalysis(null); }}
                         className={`flex flex-col items-center justify-center w-14 h-20 rounded-2xl transition-all shrink-0 ${
                             isSelected 
                             ? 'bg-charcoal text-white shadow-lg scale-110 z-10' 
@@ -112,6 +128,28 @@ export const StreamsPage = () => {
             })}
         </div>
       </div>
+
+      {/* Analysis Section */}
+      {allEntriesForDate.length > 0 && (
+          <div className="px-6 mb-4">
+              <button 
+                onClick={handleAnalyze}
+                disabled={isAnalyzing}
+                className="w-full bg-gradient-to-r from-gray-800 to-gray-900 text-white p-3 rounded-xl flex items-center justify-center space-x-2 shadow-md hover:shadow-lg transition-all"
+              >
+                  <BrainCircuit size={18} className={isAnalyzing ? 'animate-pulse' : ''} />
+                  <span className="text-xs font-bold uppercase tracking-widest">
+                      {isAnalyzing ? 'BasePulse Thinking...' : 'Analyze This Day'}
+                  </span>
+              </button>
+              {analysis && (
+                  <div className="mt-3 bg-white p-4 rounded-xl border-l-4 border-terra shadow-sm animate-in fade-in slide-in-from-top-2">
+                      <h4 className="text-terra font-bold text-xs uppercase mb-2">Psychological Summary</h4>
+                      <p className="text-sm text-charcoal leading-relaxed whitespace-pre-wrap">{analysis}</p>
+                  </div>
+              )}
+          </div>
+      )}
 
       {/* Tabs */}
       <div className="px-6 mb-6">

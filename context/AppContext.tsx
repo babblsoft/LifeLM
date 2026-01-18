@@ -1,315 +1,304 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AppState, Page, DiaryEntry, Mission, Document, ChatMessage, ToDoItem, AppNotification } from '../types';
-import { addMinutes, isPast, parseISO } from 'date-fns';
+import { Page, DiaryEntry, Mission, Document, ChatMessage, ToDoItem, AppNotification } from '../types';
 
-interface AppContextType extends AppState {
+interface UserProfile {
+  name: string;
+  career: string;
+  birthday: string;
+  phoneNumber?: string;
+  aiVoice?: string;
+  googleClientId?: string;
+}
+
+interface AppContextType {
+  currentPage: Page;
   setPage: (page: Page) => void;
+  user: string | null;
+  loadingAuth: boolean;
+  login: (email: string) => Promise<void>;
+  logout: () => void;
+  userProfile: UserProfile;
+  updateUserProfile: (profile: UserProfile) => void;
+  diaryEntries: DiaryEntry[];
   addDiaryEntry: (entry: Omit<DiaryEntry, 'id' | 'lastUpdated'>) => void;
+  missions: Mission[];
   addMission: (mission: Omit<Mission, 'id' | 'status'>) => void;
   toggleMissionStatus: (id: string) => void;
   deleteMission: (id: string) => void;
+  documents: Document[];
   addDocument: (doc: Omit<Document, 'id' | 'lastUpdated'>) => void;
   deleteDocument: (id: string) => void;
+  chatHistory: ChatMessage[];
   addChatMessage: (msg: Omit<ChatMessage, 'id'>) => void;
   clearChat: () => void;
+  toDos: ToDoItem[];
   addToDo: (text: string, reminderTime?: string, reminderFrequency?: number) => void;
   toggleToDo: (id: string) => void;
   deleteToDo: (id: string) => void;
-  updateUserProfile: (profile: Partial<AppState['userProfile']>) => void;
-  addLog: (log: string) => void;
+  notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
   clearAllNotifications: () => void;
+  basePulseLog: string[];
+  addLog: (log: string) => void;
   resetAppData: () => void;
+  speak: (text: string) => void;
 }
-
-const defaultState: AppState = {
-  currentPage: 'BASE',
-  userProfile: {
-    name: 'Noh',
-    career: 'Developer',
-    birthday: '1995-05-15',
-    phoneNumber: '',
-    aiVoice: 'Kore',
-  },
-  diaryEntries: [],
-  missions: [],
-  documents: [],
-  chatHistory: [
-    { id: '1', role: 'model', text: 'Hello Noh, BasePulse is online. How can I assist you today?', timestamp: new Date().toISOString() }
-  ],
-  toDos: [],
-  notifications: [],
-  basePulseLog: [],
-};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Load from local storage or use default
-  const [state, setState] = useState<AppState>(() => {
-    const saved = localStorage.getItem('lifebm_state');
-    return saved ? JSON.parse(saved) : defaultState;
+export const AppProvider = ({ children }: { children: ReactNode }) => {
+  // State definitions matching inferred usage
+  const [currentPage, setCurrentPage] = useState<Page>('BASE');
+  const [user, setUser] = useState<string | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  
+  // Data States
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: 'User',
+    career: 'Explorer',
+    birthday: '',
+    aiVoice: 'Kore'
   });
+  const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [toDos, setToDos] = useState<ToDoItem[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [basePulseLog, setBasePulseLog] = useState<string[]>([]);
 
+  // Load from LocalStorage on mount
   useEffect(() => {
-    localStorage.setItem('lifebm_state', JSON.stringify(state));
-  }, [state]);
+    const loadData = () => {
+      const storedUser = localStorage.getItem('lifebm_user');
+      if (storedUser) {
+        setUser(storedUser);
+        
+        const storedProfile = localStorage.getItem('lifebm_profile');
+        if (storedProfile) setUserProfile(JSON.parse(storedProfile));
+        
+        const storedDiary = localStorage.getItem('lifebm_diary');
+        if (storedDiary) setDiaryEntries(JSON.parse(storedDiary));
 
-  // Request Notification Permission on mount
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission !== 'granted') {
-      Notification.requestPermission();
-    }
+        const storedMissions = localStorage.getItem('lifebm_missions');
+        if (storedMissions) setMissions(JSON.parse(storedMissions));
+        
+        const storedDocs = localStorage.getItem('lifebm_docs');
+        if (storedDocs) setDocuments(JSON.parse(storedDocs));
+        
+        const storedChat = localStorage.getItem('lifebm_chat');
+        if (storedChat) setChatHistory(JSON.parse(storedChat));
+        
+        const storedTodos = localStorage.getItem('lifebm_todos');
+        if (storedTodos) setToDos(JSON.parse(storedTodos));
+        
+        const storedNotifs = localStorage.getItem('lifebm_notifs');
+        if (storedNotifs) setNotifications(JSON.parse(storedNotifs));
+      }
+      setLoadingAuth(false);
+    };
+    loadData();
   }, []);
 
-  // Reminder Worker
-  useEffect(() => {
-    const checkReminders = () => {
-      const now = new Date();
-      let hasUpdates = false;
-      
-      const updatedToDos = state.toDos.map(todo => {
-        if (todo.completed) return todo;
-        
-        // Skip if no reminder set
-        if (!todo.reminderTime && !todo.reminderFrequency) return todo;
+  // Persist helpers
+  const save = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
 
-        let shouldRemind = false;
-        let referenceTime = todo.reminderTime ? parseISO(todo.reminderTime) : null;
-        const lastReminded = todo.lastReminded ? parseISO(todo.lastReminded) : null;
-
-        // Case 1: Specific Time Reminder
-        if (referenceTime && !lastReminded) {
-          if (isPast(referenceTime)) {
-            shouldRemind = true;
-          }
-        }
-        
-        // Case 2: Recurring Reminder (based on Last Reminded OR start time)
-        if (todo.reminderFrequency) {
-           const baseTime = lastReminded || referenceTime || now;
-           if (lastReminded) {
-               const nextReminder = addMinutes(lastReminded, todo.reminderFrequency);
-               if (isPast(nextReminder)) {
-                   shouldRemind = true;
-               }
-           } else if (referenceTime && isPast(referenceTime)) {
-               shouldRemind = true;
-           } else if (!referenceTime && !lastReminded) {
-               shouldRemind = true; 
-           }
-        }
-
-        if (shouldRemind) {
-          hasUpdates = true;
-          
-          // Trigger System Notification
-          if ('Notification' in window && Notification.permission === 'granted') {
-              if ('serviceWorker' in navigator) {
-                  navigator.serviceWorker.ready.then(registration => {
-                      registration.showNotification('LifeBM Task Reminder', {
-                          body: `${todo.text}\n(Tap to open)`,
-                          icon: 'https://cdn-icons-png.flaticon.com/512/9386/9386918.png',
-                          vibrate: [200, 100, 200],
-                          tag: `todo-${todo.id}`,
-                          renotify: true,
-                          requireInteraction: true // Keeps it on screen
-                      } as any);
-                  });
-              } else {
-                  new Notification('LifeBM Task Reminder', { body: todo.text });
-              }
-          }
-
-          // Add App Notification history
-          addNotificationInternal({
-            title: 'Task Reminder',
-            message: `It's time for: ${todo.text}`,
-            type: 'TODO'
-          });
-
-          // Return updated todo with new lastReminded time
-          return { ...todo, lastReminded: now.toISOString() };
-        }
-
-        return todo;
-      });
-
-      if (hasUpdates) {
-        setState(prev => ({ ...prev, toDos: updatedToDos }));
-      }
-    };
-
-    const interval = setInterval(checkReminders, 10000); // Check every 10 seconds
-    return () => clearInterval(interval);
-  }, [state.toDos]);
-
-  const addNotificationInternal = (notif: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => {
-    setState(prev => ({
-        ...prev,
-        notifications: [
-            {
-                ...notif,
-                id: crypto.randomUUID(),
-                timestamp: new Date().toISOString(),
-                read: false
-            },
-            ...prev.notifications
-        ]
-    }));
+  const login = async (email: string) => {
+    localStorage.setItem('lifebm_user', email);
+    setUser(email);
   };
 
-  const setPage = (page: Page) => setState(prev => ({ ...prev, currentPage: page }));
+  const logout = () => {
+    localStorage.removeItem('lifebm_user');
+    setUser(null);
+    setPage('BASE');
+  };
+
+  const setPage = (page: Page) => setCurrentPage(page);
+
+  const updateUserProfile = (profile: UserProfile) => {
+    setUserProfile(profile);
+    save('lifebm_profile', profile);
+  };
+
+  const resetAppData = () => {
+    localStorage.clear();
+    window.location.reload();
+  };
 
   const addDiaryEntry = (entry: Omit<DiaryEntry, 'id' | 'lastUpdated'>) => {
-    const newEntry: DiaryEntry = {
-      ...entry,
-      id: crypto.randomUUID(),
-      lastUpdated: new Date().toISOString(),
+    const newEntry: DiaryEntry = { 
+      ...entry, 
+      id: Date.now().toString(), 
+      lastUpdated: new Date().toISOString() 
     };
-    setState(prev => ({ ...prev, diaryEntries: [newEntry, ...prev.diaryEntries] }));
-    addLog(`Diary Entry Added: ${entry.type} - ${entry.date}`);
+    const updated = [newEntry, ...diaryEntries];
+    setDiaryEntries(updated);
+    save('lifebm_diary', updated);
   };
 
   const addMission = (mission: Omit<Mission, 'id' | 'status'>) => {
-    const newMission: Mission = {
-      ...mission,
-      id: crypto.randomUUID(),
-      status: 'PENDING',
+    const newMission: Mission = { 
+      ...mission, 
+      id: Date.now().toString(), 
+      status: 'PENDING' 
     };
-    setState(prev => ({ ...prev, missions: [newMission, ...prev.missions] }));
-    addNotificationInternal({ title: 'New Mission', message: `Mission "${mission.title}" has been added.`, type: 'MISSION' });
-    addLog(`Mission Created: ${mission.title}`);
+    const updated = [newMission, ...missions];
+    setMissions(updated);
+    save('lifebm_missions', updated);
+    addNotification('New Mission', `Mission "${mission.title}" has been initialized.`, 'MISSION');
   };
 
   const toggleMissionStatus = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      missions: prev.missions.map(m => m.id === id ? { ...m, status: m.status === 'PENDING' ? 'COMPLETED' : 'PENDING' } : m)
-    }));
+    const updated = missions.map(m => m.id === id ? { ...m, status: (m.status === 'PENDING' ? 'COMPLETED' : 'PENDING') as 'PENDING' | 'COMPLETED' } : m);
+    setMissions(updated);
+    save('lifebm_missions', updated);
   };
 
   const deleteMission = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      missions: prev.missions.filter(m => m.id !== id)
-    }));
+    const updated = missions.filter(m => m.id !== id);
+    setMissions(updated);
+    save('lifebm_missions', updated);
   };
 
   const addDocument = (doc: Omit<Document, 'id' | 'lastUpdated'>) => {
-    const newDoc: Document = {
-      ...doc,
-      id: crypto.randomUUID(),
-      lastUpdated: new Date().toISOString(),
+    const newDoc: Document = { 
+      ...doc, 
+      id: Date.now().toString(), 
+      lastUpdated: new Date().toISOString() 
     };
-    setState(prev => ({ ...prev, documents: [newDoc, ...prev.documents] }));
-    addLog(`Document Created: ${doc.title}`);
+    const updated = [newDoc, ...documents];
+    setDocuments(updated);
+    save('lifebm_docs', updated);
   };
 
   const deleteDocument = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      documents: prev.documents.filter(d => d.id !== id)
-    }));
+    const updated = documents.filter(d => d.id !== id);
+    setDocuments(updated);
+    save('lifebm_docs', updated);
   };
 
   const addChatMessage = (msg: Omit<ChatMessage, 'id'>) => {
-    const newMsg: ChatMessage = {
-      ...msg,
-      id: crypto.randomUUID(),
-    };
-    setState(prev => ({ ...prev, chatHistory: [...prev.chatHistory, newMsg] }));
+    const newMsg: ChatMessage = { ...msg, id: Date.now().toString() };
+    const updated = [...chatHistory, newMsg];
+    setChatHistory(updated);
+    save('lifebm_chat', updated);
   };
 
   const clearChat = () => {
-    setState(prev => ({
-      ...prev,
-      chatHistory: [{ id: crypto.randomUUID(), role: 'model', text: 'Chat history cleared. I am ready for new tasks.', timestamp: new Date().toISOString() }]
-    }));
-    addLog('Chat history cleared');
+    setChatHistory([]);
+    save('lifebm_chat', []);
   };
 
   const addToDo = (text: string, reminderTime?: string, reminderFrequency?: number) => {
     const newTodo: ToDoItem = {
-      id: crypto.randomUUID(),
+      id: Date.now().toString(),
       text,
       completed: false,
       reminderTime,
       reminderFrequency
     };
-    setState(prev => ({ ...prev, toDos: [newTodo, ...prev.toDos] }));
-    addLog(`To-Do Added: ${text}`);
+    const updated = [newTodo, ...toDos];
+    setToDos(updated);
+    save('lifebm_todos', updated);
+    addNotification('To-Do Added', `Task "${text}" added to your list.`, 'TODO');
   };
 
   const toggleToDo = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      toDos: prev.toDos.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
-    }));
+    const updated = toDos.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+    setToDos(updated);
+    save('lifebm_todos', updated);
   };
 
   const deleteToDo = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      toDos: prev.toDos.filter(t => t.id !== id)
-    }));
+    const updated = toDos.filter(t => t.id !== id);
+    setToDos(updated);
+    save('lifebm_todos', updated);
   };
 
-  const updateUserProfile = (profile: Partial<AppState['userProfile']>) => {
-    setState(prev => ({ ...prev, userProfile: { ...prev.userProfile, ...profile } }));
-  };
-
-  const addLog = (log: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setState(prev => ({ ...prev, basePulseLog: [`[${timestamp}] ${log}`, ...prev.basePulseLog] }));
+  const addNotification = (title: string, message: string, type: 'TODO' | 'MISSION' | 'SYSTEM') => {
+    const newNotif: AppNotification = {
+      id: Date.now().toString(),
+      title,
+      message,
+      timestamp: new Date().toISOString(),
+      read: false,
+      type
+    };
+    const updated = [newNotif, ...notifications];
+    setNotifications(updated);
+    save('lifebm_notifs', updated);
   };
 
   const markNotificationRead = (id: string) => {
-      setState(prev => ({
-          ...prev,
-          notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n)
-      }));
+    const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n);
+    setNotifications(updated);
+    save('lifebm_notifs', updated);
   };
 
   const clearAllNotifications = () => {
-      setState(prev => ({ ...prev, notifications: [] }));
+    setNotifications([]);
+    save('lifebm_notifs', []);
   };
 
-  const resetAppData = () => {
-    if(confirm('Are you sure you want to wipe all data? This cannot be undone.')) {
-        setState(defaultState);
-        localStorage.removeItem('lifebm_state');
+  const addLog = (log: string) => {
+    setBasePulseLog(prev => [log, ...prev]);
+  };
+
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      // Simple voice selection based on profile if available in browser
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+          utterance.voice = voices.find(v => v.name.includes('Google')) || voices[0];
+      }
+      window.speechSynthesis.speak(utterance);
     }
   };
 
-  return (
-    <AppContext.Provider value={{
-      ...state,
-      setPage,
-      addDiaryEntry,
-      addMission,
-      toggleMissionStatus,
-      deleteMission,
-      addDocument,
-      deleteDocument,
-      addChatMessage,
-      clearChat,
-      addToDo,
-      toggleToDo,
-      deleteToDo,
-      updateUserProfile,
-      addLog,
-      markNotificationRead,
-      clearAllNotifications,
-      resetAppData
-    }}>
-      {children}
-    </AppContext.Provider>
-  );
+  const value = {
+    currentPage,
+    setPage,
+    user,
+    loadingAuth,
+    login,
+    logout,
+    userProfile,
+    updateUserProfile,
+    diaryEntries,
+    addDiaryEntry,
+    missions,
+    addMission,
+    toggleMissionStatus,
+    deleteMission,
+    documents,
+    addDocument,
+    deleteDocument,
+    chatHistory,
+    addChatMessage,
+    clearChat,
+    toDos,
+    addToDo,
+    toggleToDo,
+    deleteToDo,
+    notifications,
+    markNotificationRead,
+    clearAllNotifications,
+    basePulseLog,
+    addLog,
+    resetAppData,
+    speak
+  };
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) throw new Error('useApp must be used within AppProvider');
+  if (context === undefined) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
   return context;
 };

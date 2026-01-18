@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Menu, Activity, Plus, Bell, PlusCircle, X, Check } from 'lucide-react';
+import { Menu, Activity, Plus, Bell, PlusCircle, X, Check, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Sidebar } from '../components/Sidebar';
-import { format } from 'date-fns';
+import { format, isPast, parseISO } from 'date-fns';
 
 export const BasePage = () => {
   const { userProfile, missions, diaryEntries, notifications, markNotificationRead, clearAllNotifications, addMission, setPage } = useApp();
@@ -11,7 +11,7 @@ export const BasePage = () => {
   const [showMissionModal, setShowMissionModal] = useState(false);
 
   // Stats
-  const activeMissions = missions.filter(m => m.status === 'PENDING').length;
+  const activeMissions = missions.filter(m => m.status === 'PENDING' && (!m.activationDate || isPast(parseISO(m.activationDate)))).length;
   const todaysEntries = diaryEntries.filter(d => d.date === format(new Date(), 'yyyy-MM-dd')).length;
   const unreadNotifications = notifications.filter(n => !n.read).length;
   const currentTime = format(new Date(), 'h:mm a');
@@ -19,6 +19,7 @@ export const BasePage = () => {
   // Mission Form State
   const [missionTitle, setMissionTitle] = useState('');
   const [missionCategory, setMissionCategory] = useState<'EVERYDAY' | 'FINITE'>('FINITE');
+  const [missionActivation, setMissionActivation] = useState('');
   const [missionDeadline, setMissionDeadline] = useState('');
 
   const handleAddMission = () => {
@@ -26,11 +27,13 @@ export const BasePage = () => {
       addMission({
           title: missionTitle,
           category: missionCategory,
+          activationDate: missionActivation || undefined,
           deadline: missionDeadline || undefined,
           description: 'Manually added via Base.'
       });
       setMissionTitle('');
       setMissionCategory('FINITE');
+      setMissionActivation('');
       setMissionDeadline('');
       setShowMissionModal(false);
   };
@@ -46,7 +49,6 @@ export const BasePage = () => {
             </button>
             
             <div className="flex items-center space-x-3">
-                {/* Manual Add Mission */}
                 <button 
                     onClick={() => setShowMissionModal(true)}
                     className="flex items-center space-x-1 bg-terra/10 text-terra px-3 py-1.5 rounded-full hover:bg-terra hover:text-white transition-all"
@@ -55,7 +57,6 @@ export const BasePage = () => {
                     <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Add Mission</span>
                 </button>
 
-                {/* Notification Bell */}
                 <button 
                     onClick={() => setShowNotifications(!showNotifications)}
                     className="p-2 relative hover:bg-gray-100 rounded-full transition-colors"
@@ -66,14 +67,12 @@ export const BasePage = () => {
                     )}
                 </button>
 
-                {/* Profile Pic */}
                 <button onClick={() => setPage('SETTINGS')} className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-300 to-teal-200 overflow-hidden border-2 border-white shadow-md">
                     <img src={`https://picsum.photos/seed/${userProfile.name}/200`} alt="Profile" className="w-full h-full object-cover" />
                 </button>
             </div>
         </header>
 
-        {/* Notification Bar / Panel */}
         {showNotifications && (
             <div className="mx-6 mb-6 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200 absolute z-30 w-[calc(100%-3rem)]">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
@@ -85,7 +84,7 @@ export const BasePage = () => {
                         <div 
                             key={notif.id} 
                             onClick={() => markNotificationRead(notif.id)}
-                            className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer ${!notif.read ? 'bg-blue-50/30' : ''}`}
+                            className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer animate-slide-in ${!notif.read ? 'bg-blue-50/30' : ''}`}
                         >
                             <div className="flex justify-between items-start mb-1">
                                 <span className={`text-xs font-bold uppercase tracking-wider ${notif.type === 'TODO' ? 'text-terra' : 'text-blue-500'}`}>
@@ -103,7 +102,6 @@ export const BasePage = () => {
             </div>
         )}
 
-        {/* Mission Modal Overlay */}
         {showMissionModal && (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
@@ -114,7 +112,7 @@ export const BasePage = () => {
                         </button>
                     </div>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-h-[70vh] overflow-y-auto no-scrollbar pr-1">
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Title</label>
                             <input 
@@ -132,15 +130,24 @@ export const BasePage = () => {
                                     onClick={() => setMissionCategory('FINITE')}
                                     className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${missionCategory === 'FINITE' ? 'bg-charcoal text-white' : 'bg-softGray text-gray-400'}`}
                                 >
-                                    One-Time (Finite)
+                                    One-Time
                                 </button>
                                 <button 
                                     onClick={() => setMissionCategory('EVERYDAY')}
                                     className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${missionCategory === 'EVERYDAY' ? 'bg-charcoal text-white' : 'bg-softGray text-gray-400'}`}
                                 >
-                                    Routine (Everyday)
+                                    Routine
                                 </button>
                             </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Activation Date (Start Monitoring)</label>
+                            <input 
+                                type="datetime-local" 
+                                value={missionActivation}
+                                onChange={(e) => setMissionActivation(e.target.value)}
+                                className="w-full bg-softGray rounded-xl p-3 text-charcoal focus:outline-none focus:ring-2 focus:ring-terra/20"
+                            />
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Deadline (Optional)</label>
@@ -164,44 +171,37 @@ export const BasePage = () => {
         )}
 
         <div className="px-6 space-y-8">
-            {/* Title Section */}
             <div>
                 <h1 className="text-4xl font-serif font-bold text-charcoal">
                     Life<span className="text-terra">BM</span> / <br /> {userProfile.name}
                 </h1>
                 <p className="text-xs tracking-widest text-gray-400 mt-2 uppercase">Managed by Spizify</p>
                 
-                {/* Floating Status Pill */}
                 <div className="absolute top-12 right-16 bg-charcoal text-white text-[10px] px-3 py-2 rounded-full shadow-xl flex items-center space-x-2 pointer-events-none">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
                     <span>BasePulse: ACTIVE | {currentTime}</span>
                 </div>
             </div>
 
-            {/* Active Command Stream Card */}
             <button 
                 onClick={() => setPage('BASEPULSE')}
                 className="w-full text-left bg-[#FAF5F5] rounded-3xl p-6 relative overflow-hidden border border-terra/10 shadow-sm group hover:shadow-lg transition-all active:scale-[0.98]"
             >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-terra/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-                
                 <div className="flex items-center space-x-3 mb-4">
                     <div className="w-8 h-8 rounded-lg bg-terra flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                         <Activity size={18} />
                     </div>
                     <span className="text-terra font-bold text-sm uppercase tracking-wide">Active Command Stream</span>
                 </div>
-                
                 <p className="text-terra/80 font-serif italic text-lg leading-relaxed mb-6">
                     BasePulse is monitoring your identity model. Awaiting input...
                 </p>
-                
                 <div className="text-[10px] font-bold text-terra/60 flex items-center group-hover:text-terra transition-colors uppercase tracking-widest">
                     Tap to open BasePulse →
                 </div>
             </button>
 
-            {/* Identity Pulse Card */}
             <div className="bg-charcoal text-white rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
                 <div className="flex justify-between items-center mb-8">
                     <div className="flex items-center space-x-3">
@@ -211,7 +211,6 @@ export const BasePage = () => {
                 </div>
 
                 <div className="space-y-6">
-                    {/* Life Stream Status Link */}
                     <button onClick={() => setPage('STREAMS')} className="flex space-x-4 w-full text-left group">
                         <div className="w-1 bg-terra rounded-full opacity-60 group-hover:opacity-100 transition-opacity"></div>
                         <div>
@@ -224,7 +223,6 @@ export const BasePage = () => {
                         </div>
                     </button>
 
-                    {/* Missions Status Link */}
                     <button onClick={() => setPage('MISSIONS')} className="flex space-x-4 w-full text-left group">
                         <div className="w-1 bg-yellow-500 rounded-full opacity-80 group-hover:opacity-100 transition-opacity"></div>
                         <div>
@@ -235,8 +233,6 @@ export const BasePage = () => {
                         </div>
                     </button>
                 </div>
-
-                {/* Animated Background Pulse */}
                 <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-terra/20 rounded-full blur-3xl animate-pulse-slow"></div>
             </div>
         </div>

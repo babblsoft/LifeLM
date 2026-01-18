@@ -1,7 +1,7 @@
 import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
-import { ChatMessage } from "../types";
+import { ChatMessage, DiaryEntry } from "../types";
 
-// Initialize Gemini Client
+// Initialize Gemini Client with specific key
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Define Tools
@@ -65,7 +65,8 @@ export const sendMessageToGemini = async (
   newMessage: string,
   userContext: string
 ) => {
-  const model = 'gemini-3-flash-preview';
+  // Use Pro model for better quality
+  const model = 'gemini-3-pro-preview';
   
   const systemInstruction = `
     You are BasePulse, an intelligent and proactive life assistant for the app LifeBM.
@@ -82,6 +83,7 @@ export const sendMessageToGemini = async (
     
     Style:
     - Be concise, helpful, and friendly.
+    - Use the provided tools whenever specific actions (like adding a mission or diary entry) are requested.
     - If the user provides a raw story, offer to organize it into a Life Stream.
     - If the user mentions a specific event, log it as a Fact Stream.
     - If the user is idle, you can suggest actions based on their history (simulated by proactive messages).
@@ -102,8 +104,6 @@ export const sendMessageToGemini = async (
 
     const response = await chat.sendMessage({ message: newMessage });
     
-    // Check for tool calls
-    // In the new SDK, accessing functionCalls directly from the response object
     const functionCalls = response.functionCalls;
     
     if (functionCalls && functionCalls.length > 0) {
@@ -128,16 +128,37 @@ export const sendMessageToGemini = async (
 };
 
 export const generateProactiveMessage = async (userContext: string) => {
-    // A simplified single-turn generation to simulate a proactive message
     const prompt = `Based on the user context: "${userContext}", generate a short, one-sentence proactive question or reminder for the user. Do not be repetitive.`;
-    
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3-pro-preview',
             contents: prompt
         });
         return response.text;
     } catch (e) {
         return "How is your day going so far?";
+    }
+}
+
+export const analyzeDay = async (entries: DiaryEntry[], date: string) => {
+    if (entries.length === 0) return "No data available for this day to analyze.";
+
+    const content = entries.map(e => `[${e.type}] ${e.content}`).join('\n');
+    const prompt = `
+        Analyze the following diary entries for ${date}. 
+        Provide a brief psychological summary, emotional tone analysis, and one constructive piece of advice.
+        
+        Entries:
+        ${content}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt
+        });
+        return response.text;
+    } catch (e) {
+        return "Unable to analyze streams at the moment.";
     }
 }
